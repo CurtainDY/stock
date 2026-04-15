@@ -1,0 +1,76 @@
+syntax = "proto3";
+package backtest;
+option go_package = "github.com/parsedong/stock/backtest-engine/proto";
+
+message Bar {
+  string symbol     = 1;
+  int64  date_unix  = 2;
+  double open       = 3;
+  double high       = 4;
+  double low        = 5;
+  double close      = 6;
+  double volume     = 7;
+  double amount     = 8;
+  double adj_factor = 9;
+}
+
+enum OrderSide {
+  BUY  = 0;
+  SELL = 1;
+}
+
+enum OrderStatus {
+  PENDING  = 0;
+  FILLED   = 1;
+  REJECTED = 2;
+}
+
+message Order {
+  string    symbol   = 1;
+  OrderSide side     = 2;
+  double    quantity = 3;
+  double    price    = 4;
+}
+
+message Fill {
+  string      symbol        = 1;
+  OrderSide   side          = 2;
+  double      filled_qty    = 3;
+  double      filled_price  = 4;
+  double      commission    = 5;
+  double      stamp_duty    = 6;
+  OrderStatus status        = 7;
+  string      reject_reason = 8;
+}
+
+message BacktestRequest {
+  repeated string symbols      = 1;
+  string          start_date   = 2;
+  string          end_date     = 3;
+  double          init_capital = 4;
+  double          commission   = 5;
+}
+
+message BacktestResult {
+  double          annual_return = 1;
+  double          max_drawdown  = 2;
+  double          sharpe_ratio  = 3;
+  double          win_rate      = 4;
+  double          avg_hold_days = 5;
+  double          turnover_rate = 6;
+  double          calmar_ratio  = 7;
+  double          total_return  = 8;
+  repeated double equity_curve  = 9;
+}
+
+message StreamRequest {
+  repeated string symbols    = 1;
+  string          start_date = 2;
+  string          end_date   = 3;
+}
+
+service BacktestEngine {
+  rpc RunBacktest(BacktestRequest) returns (BacktestResult);
+  rpc StreamBars(StreamRequest)    returns (stream Bar);
+  rpc SubmitOrder(Order)           returns (Fill);
+}
