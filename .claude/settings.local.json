@@ -26,7 +26,8 @@
       "Bash(brew install:*)",
       "Bash(go install:*)",
       "Bash(/opt/homebrew/bin/brew install:*)",
-      "Bash(/usr/local/bin/brew install:*)"
+      "Bash(/usr/local/bin/brew install:*)",
+      "Bash(go test:*)"
     ]
   }
 }
