@@ -14,11 +14,14 @@ type Bar struct {
 	AdjFactor float64
 }
 
+// AdjClose returns the forward-adjusted price using Tonghuashun's additive format.
+// AdjFactor stores a negative additive offset (e.g. -0.055).
+// When AdjFactor == 0, no adjustment data is available — return Close as-is.
 func (b Bar) AdjClose() float64 {
 	if b.AdjFactor == 0 {
 		return b.Close
 	}
-	return b.Close * b.AdjFactor
+	return b.Close + b.AdjFactor
 }
 
 func (b Bar) IsLimitUp(prevClose float64, isST bool) bool {
