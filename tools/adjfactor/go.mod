@@ -1,10 +1,10 @@
 module github.com/parsedong/stock/tools/adjfactor
 
-go 1.25.0
+go 1.24.9
 
 require (
 	github.com/parquet-go/parquet-go v0.29.0
-	golang.org/x/text v0.36.0
+	golang.org/x/text v0.21.0
 )
 
 require (

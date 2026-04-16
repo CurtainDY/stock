@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -104,7 +105,7 @@ func loadFactors(zipPath string) (map[string]map[string]float64, error) {
 		if !strings.HasSuffix(strings.ToLower(f.Name), ".csv") {
 			continue
 		}
-		sym := strings.ToLower(strings.TrimSuffix(filepath.Base(f.Name), ".csv"))
+		sym := strings.ToLower(strings.TrimSuffix(path.Base(f.Name), ".csv"))
 		rc, err := f.Open()
 		if err != nil {
 			log.Printf("open %s in zip: %v", f.Name, err)
@@ -180,27 +181,52 @@ func parseFactorCSV(r io.Reader) (map[string]float64, error) {
 	return result, nil
 }
 
-// applyFactors reads a Parquet file, updates AdjFactor for matching dates, and writes it back.
-func applyFactors(path string, dateFactors map[string]float64) error {
+// newParquetReader wraps parquet.NewGenericReader to recover from panics on invalid files.
+func newParquetReader(f *os.File) (r *parquet.GenericReader[parquetRow], err error) {
+	defer func() {
+		if p := recover(); p != nil {
+			err = fmt.Errorf("not a valid parquet file: %v", p)
+		}
+	}()
+	r = parquet.NewGenericReader[parquetRow](f)
+	return
+}
+
+// readParquetRows opens the parquet file at path, reads all rows, and returns them.
+func readParquetRows(path string) ([]parquetRow, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return fmt.Errorf("open %s: %w", path, err)
+		return nil, fmt.Errorf("open %s: %w", path, err)
 	}
+	defer f.Close()
 
-	reader := parquet.NewGenericReader[parquetRow](f)
+	reader, err := newParquetReader(f)
+	if err != nil {
+		return nil, err
+	}
+	defer reader.Close()
+
 	var rows []parquetRow
 	buf := make([]parquetRow, 1000)
 	for {
 		n, err := reader.Read(buf)
-		if n > 0 {
-			rows = append(rows, buf[:n]...)
-		}
-		if err != nil {
+		rows = append(rows, buf[:n]...)
+		if err == io.EOF {
 			break
 		}
+		if err != nil {
+			return nil, fmt.Errorf("read parquet: %w", err)
+		}
 	}
-	reader.Close()
-	f.Close()
+	return rows, nil
+}
+
+// applyFactors reads a Parquet file, updates AdjFactor for matching dates, and writes it back.
+func applyFactors(path string, dateFactors map[string]float64) error {
+	rows, err := readParquetRows(path)
+	if err != nil {
+		return err
+	}
 
 	updated := 0
 	for i := range rows {
@@ -218,15 +244,24 @@ func applyFactors(path string, dateFactors map[string]float64) error {
 		return nil
 	}
 
-	// Write back to the same path (overwrite).
-	out, err := os.Create(path)
+	// Atomic write: write to a temp file then rename.
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".adjfactor-*.parquet")
 	if err != nil {
-		return fmt.Errorf("create %s: %w", path, err)
+		return fmt.Errorf("create temp: %w", err)
 	}
-	defer out.Close()
-
-	if err := parquet.Write[parquetRow](out, rows); err != nil {
-		return fmt.Errorf("parquet write %s: %w", path, err)
+	tmpName := tmp.Name()
+	if err := parquet.Write(tmp, rows); err != nil {
+		tmp.Close()
+		os.Remove(tmpName)
+		return fmt.Errorf("write parquet: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmpName)
+		return fmt.Errorf("close temp: %w", err)
+	}
+	if err := os.Rename(tmpName, path); err != nil {
+		os.Remove(tmpName)
+		return fmt.Errorf("rename temp: %w", err)
 	}
 	log.Printf("updated %d rows in %s", updated, filepath.Base(path))
 	return nil
