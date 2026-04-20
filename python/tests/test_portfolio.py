@@ -47,3 +47,20 @@ def test_snapshot():
     assert len(snap.positions) == 1
     assert snap.positions["sz000001"].quantity == 1000
     assert abs(snap.total_value - (p.cash + 11_000)) < 0.01
+
+
+def test_rejected_fill_is_ignored():
+    p = PortfolioTracker(init_cash=100_000)
+    rejected = Fill(
+        symbol="sz000001",
+        side=OrderSide.BUY,
+        filled_qty=1000,
+        filled_price=10.0,
+        commission=3.0,
+        stamp_duty=0.0,
+        status=FillStatus.REJECTED,
+        reject_reason="limit_up",
+    )
+    p.apply_fill(rejected, date(2020, 1, 2))
+    assert p.cash == 100_000  # unchanged
+    assert p.position("sz000001").quantity == 0  # no position created
