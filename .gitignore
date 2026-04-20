@@ -1,1 +1,7 @@
 .worktrees/
+data/pg/
+data/calendar.csv
+data/normalized/
+tools/adjfactor/adjfactor
+tools/calendar/calendar
+tools/importer/importer
