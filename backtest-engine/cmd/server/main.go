@@ -97,35 +97,37 @@ func (s *server) StreamBars(req *pb.StreamRequest, stream pb.BacktestEngine_Stre
 		currentBars: make(map[string]data.Bar),
 		prevPrices:  make(map[string]float64),
 	}
-	s.sessions.Store(sessionID, sess)
-	defer s.sessions.Delete(sessionID)
 
 	days, err := s.store.TradingDays(start, end)
 	if err != nil {
 		return status.Errorf(codes.Internal, "trading days: %v", err)
 	}
 
+	s.sessions.Store(sessionID, sess)
+	defer s.sessions.Delete(sessionID)
+
 	var prevDay time.Time
 	for _, day := range days {
-		if !prevDay.IsZero() {
-			sess.mu.Lock()
-			for sym, bar := range sess.currentBars {
-				sess.prevPrices[sym] = bar.Close
-			}
-			sess.currentBars = make(map[string]data.Bar)
-			sess.mu.Unlock()
-		}
-		prevDay = day
-
 		bars, err := s.store.LoadBarsByDate(day, req.Symbols)
 		if err != nil {
 			return status.Errorf(codes.Internal, "load bars %s: %v", day.Format("2006-01-02"), err)
 		}
-		for sym, bar := range bars {
-			sess.mu.Lock()
-			sess.currentBars[sym] = bar
-			sess.mu.Unlock()
 
+		sess.mu.Lock()
+		if !prevDay.IsZero() {
+			for sym, bar := range sess.currentBars {
+				sess.prevPrices[sym] = bar.Close
+			}
+		}
+		sess.currentBars = make(map[string]data.Bar, len(bars))
+		for sym, bar := range bars {
+			sess.currentBars[sym] = bar
+		}
+		sess.mu.Unlock()
+		prevDay = day
+
+		// Send bars outside the lock
+		for _, bar := range bars {
 			if err := stream.Send(&pb.Bar{
 				Symbol:    bar.Symbol,
 				DateUnix:  bar.Date.Unix(),
@@ -164,6 +166,11 @@ func (s *server) SubmitOrder(ctx context.Context, req *pb.Order) (*pb.Fill, erro
 	sess.mu.Lock()
 	bar, hasCurrent := sess.currentBars[req.Symbol]
 	prevClose := sess.prevPrices[req.Symbol]
+	var availQty float64
+	if req.Side == pb.OrderSide_SELL && hasCurrent {
+		pos := sess.portfolio.Position(req.Symbol)
+		availQty = pos.AvailableQty(orderDate)
+	}
 	sess.mu.Unlock()
 
 	if !hasCurrent {
@@ -175,17 +182,13 @@ func (s *server) SubmitOrder(ctx context.Context, req *pb.Order) (*pb.Fill, erro
 		}, nil
 	}
 
-	if req.Side == pb.OrderSide_SELL {
-		pos := sess.portfolio.Position(req.Symbol)
-		avail := pos.AvailableQty(orderDate)
-		if avail < req.Quantity {
-			return &pb.Fill{
-				Symbol:       req.Symbol,
-				Side:         req.Side,
-				Status:       pb.OrderStatus_REJECTED,
-				RejectReason: fmt.Sprintf("T+1: available=%.0f, want=%.0f", avail, req.Quantity),
-			}, nil
-		}
+	if req.Side == pb.OrderSide_SELL && availQty < req.Quantity {
+		return &pb.Fill{
+			Symbol:       req.Symbol,
+			Side:         req.Side,
+			Status:       pb.OrderStatus_REJECTED,
+			RejectReason: fmt.Sprintf("T+1: available=%.0f, want=%.0f", availQty, req.Quantity),
+		}, nil
 	}
 
 	order := matcher.Order{
@@ -198,8 +201,11 @@ func (s *server) SubmitOrder(ctx context.Context, req *pb.Order) (*pb.Fill, erro
 
 	if fill.Status == matcher.Filled {
 		sess.mu.Lock()
-		_ = sess.portfolio.ApplyFill(fill, orderDate)
+		applyErr := sess.portfolio.ApplyFill(fill, orderDate)
 		sess.mu.Unlock()
+		if applyErr != nil {
+			return nil, status.Errorf(codes.Internal, "apply fill: %v", applyErr)
+		}
 	}
 
 	// matcher.Filled=0, matcher.Rejected=1
