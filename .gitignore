@@ -5,3 +5,8 @@ data/normalized/
 tools/adjfactor/adjfactor
 tools/calendar/calendar
 tools/importer/importer
+python/.venv/
+python/__pycache__/
+python/**/__pycache__/
+python/**/**/__pycache__/
+python/*.egg-info/
