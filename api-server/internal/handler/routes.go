@@ -19,7 +19,12 @@ func RegisterHandlers(server *rest.Server, ctx *svc.ServiceContext) {
 		{Method: http.MethodPut, Path: "/v1/strategies/:id", Handler: updateStrategyHandler(ctx)},
 		{Method: http.MethodDelete, Path: "/v1/strategies/:id", Handler: deleteStrategyHandler(ctx)},
 
-		// Backtests (added in Task 5)
-		// Symbols (added in Task 5)
+		// Backtests
+		{Method: http.MethodPost, Path: "/v1/backtests", Handler: runBacktestHandler(ctx)},
+		{Method: http.MethodGet, Path: "/v1/backtests", Handler: listBacktestsHandler(ctx)},
+		{Method: http.MethodGet, Path: "/v1/backtests/:id", Handler: getBacktestHandler(ctx)},
+
+		// Symbols
+		{Method: http.MethodGet, Path: "/v1/symbols", Handler: listSymbolsHandler(ctx)},
 	})
 }
