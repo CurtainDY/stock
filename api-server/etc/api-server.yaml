@@ -1,0 +1,14 @@
+Name: api-server
+Host: 0.0.0.0
+Port: 8080
+
+BacktestEngine:
+  Host: localhost
+  Port: 50051
+
+Database:
+  DSN: postgres://stock:stock123@localhost:5432/stock?sslmode=disable
+
+Python:
+  Executable: python3
+  WorkDir: ../python
