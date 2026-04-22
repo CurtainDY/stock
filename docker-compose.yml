@@ -1,0 +1,19 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: stock_pg
+    environment:
+      POSTGRES_USER: stock
+      POSTGRES_PASSWORD: stock123
+      POSTGRES_DB: stock
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./data/pg:/var/lib/postgresql/data
+      - ./migrations:/docker-entrypoint-initdb.d
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U stock"]
+      interval: 5s
+      timeout: 5s
+      retries: 5

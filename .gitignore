@@ -1,12 +1,28 @@
-.worktrees/
+# Data (raw market data — never commit)
+data/raw/
 data/pg/
 data/calendar.csv
 data/normalized/
+
+# Compiled binaries
 tools/adjfactor/adjfactor
 tools/calendar/calendar
 tools/importer/importer
+backtest-engine-bin
+backtest-engine/server
+api-server/api-server
+
+# Python
 python/.venv/
 python/__pycache__/
 python/**/__pycache__/
 python/**/**/__pycache__/
 python/*.egg-info/
+
+# Frontend build artifacts
+frontend/node_modules/
+frontend/dist/
+
+# macOS
+.DS_Store
+.worktrees/
